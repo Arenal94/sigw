@@ -15,5 +15,7 @@ export default {
 }
 </script>
 <style>
-.all{height:100%}
+.all {
+  height: 100%;
+}
 </style>

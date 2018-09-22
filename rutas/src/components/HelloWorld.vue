@@ -16,6 +16,19 @@
     :title='m.title'
     @click='center=m.position'
   />
+  <GmapMarker
+    ref='mapRef'
+    :key='index'
+    v-for='(m, index) in busMarkers'
+    :position='m.position'
+    :clickable='true'
+    :draggable='true'
+    :icon='m.url'
+    :title='m.title'
+    @click='center=m.position'
+  />
+   <gmap-polyline v-bind:path.sync="filteredJourneyPath" v-bind:options="{ strokeColor:'#008000'}">
+         </gmap-polyline>
 
 </GmapMap>
   </div>
@@ -33,10 +46,14 @@ export default {
     return {
       center: { lat: 43.5369, lng: -5.637167 },
       markers: [],
-
+      busMarkers: [],
+      filteredJourneyPath: [],
+      filteredBusPositions: [],
       places: [],
       nombres: [],
       puntoTrayecto: [],
+      busPositions: [],
+      lines: [],
       mapas: [
         {
           nombre: "PNOA ES",
@@ -88,10 +105,19 @@ export default {
     };
   },
   async created() {
+    const self = this;
     this.markers.push({
       position: this.center
     });
-    this.obtainParadas();
+    let getDataPromise = new Promise((resolve, reject) =>
+      resolve(this.getDataAPI())
+    );
+
+    getDataPromise.then(() => {
+      this.relateLinesAndJourney();
+      this.drawDataOnGoogleMap();
+      this.busPositionsRefresh();
+    });
   },
   computed: {
     google: gmapApi
@@ -198,88 +224,128 @@ export default {
         tileSize: new this.google.maps.Size(256, 256)
       });
     },
-    obtainParadas: function() {
+    getDataAPI: function() {
       return axios
-        .get("http://datos.gijon.es/doc/transporte/busgijontray.json", {
-          headers: {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers":
-              "Origin, X-Requested-With, Content-Type, Accept"
+        .all([
+          axios.get("http://datos.gijon.es/doc/transporte/busgijontray.json"),
+          axios.get("http://datos.gijon.es/doc/transporte/busgijoninfo.json"),
+          axios.get("http://datos.gijon.es/doc/transporte/busgijontr.json")
+        ])
+        .then(
+          axios.spread((trayRes, InfoRes, TrRes) => {
+            this.puntoTrayecto = trayRes.data.puntosTrayectos.puntoTrayecto;
+            this.lines = InfoRes.data.lineas.linea;
+            this.busPositions = TrRes.data.posiciones.posicion;
+          })
+        );
+    },
+    relateLinesAndJourney() {
+      var lineas = this.lines;
+      this.puntoTrayecto.map(function(trayecto, value) {
+        lineas.map(function(linea, value) {
+          // console.log(`Comparando ${linea.idlinea} con  ${trayecto.idlinea}`)
+          if (linea.idlinea == trayecto.idlinea) {
+            trayecto.infolinea = linea;
           }
-        })
-        .then(response => {
-          this.puntoTrayecto = response.data.puntosTrayectos.puntoTrayecto;
-          axios
-            .get("http://datos.gijon.es/doc/transporte/busgijoninfo.json", {
-              headers: {
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers":
-                  "Origin, X-Requested-With, Content-Type, Accept"
-              }
-            })
-            .then(response => {
-              axios
-                .get("http://datos.gijon.es/doc/transporte/busgijontr.json", {
-                  headers: {
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Headers":
-                      "Origin, X-Requested-With, Content-Type, Accept"
-                  }
-                })
-                .then(response => {
-                  var posiciones = response.data.posiciones.posicion;
-                  console.log(posiciones);
-                  for(var j=0; j<posiciones.length; j++){
-                    var pos = utm.toLatLon(
-                      posiciones[j].utmx,
-                      posiciones[j].utmy,
-                      30,
-                      "N"
-                    );
-                    var marker = new google.maps.Marker({
-                      position: new google.maps.LatLng(pos.latitude, pos.longitude),
-                      url: 'http://icons.iconarchive.com/icons/flaticonmaker/flat-style/24/bus-icon.png',
-                      title: posiciones[j].idautobus + ' - ' + posiciones[j].modelo
-                    });
-                    this.markers.push(marker);
-                }
-              });
-
-              var lineas = response.data.lineas.linea;
-              this.puntoTrayecto.map(function(trayecto, value) {
-                lineas.map(function(linea, value) {
-                  if (linea.idlinea == trayecto.idlinea) {
-                    trayecto.infolinea = linea;
-                  }
-                });
-              });
-              var i;
-              for (i = 0; i < 100; i++) {
-                var pos = utm.toLatLon(
-                  this.puntoTrayecto[i].utmx,
-                  this.puntoTrayecto[i].utmy,
-                  30,
-                  "N"
-                );
-                var pinImage = new google.maps.MarkerImage(
-                  "http://chart.apis.google.com/chart?chst=d_map_pin_letter&chld=%E2%80%A2|" +
-                    this.puntoTrayecto[i].infolinea.colorHex,
-                  new google.maps.Size(21, 34),
-                  new google.maps.Point(0, 0),
-                  new google.maps.Point(10, 34)
-                );
-                var marker = new google.maps.Marker({
-                  position: new google.maps.LatLng(pos.latitude, pos.longitude),
-                  url: pinImage,
-                  title:
-                    this.puntoTrayecto[i].infolinea.descripcion +
-                    " Linea: " +
-                    this.puntoTrayecto[i].idlinea
-                });
-                this.markers.push(marker);
-              }
-            });
         });
+      });
+    },
+    drawDataOnGoogleMap() {
+      console.log(this.puntoTrayecto);
+      console.log(this.busPositions);
+      console.log(this.lines);
+      let filteredJourney = this.puntoTrayecto.filter(
+        journey => journey.idlinea == 1
+      ); //Trayecto solo el 1
+      var i;
+      for (i = 0; i < filteredJourney.length; i++) {
+        var pos = utm.toLatLon(
+          filteredJourney[i].utmx,
+          filteredJourney[i].utmy,
+          30,
+          "N"
+        );
+        this.filteredJourneyPath.push({
+          lat: pos.latitude,
+          lng: pos.longitude
+        });
+        var pinImage = new google.maps.MarkerImage(
+          "http://chart.apis.google.com/chart?chst=d_map_pin_letter&chld=%E2%80%A2|" +
+            filteredJourney[i].infolinea.colorHex,
+          new google.maps.Size(21, 34),
+          new google.maps.Point(0, 0),
+          new google.maps.Point(10, 34)
+        );
+        var marker = new google.maps.Marker({
+          position: new google.maps.LatLng(pos.latitude, pos.longitude),
+          url: pinImage,
+          title:
+            filteredJourney[i].infolinea.descripcion +
+            " Linea: " +
+            filteredJourney[i].idlinea
+        });
+        this.markers.push(marker);
+      }
+      var flightPath = new google.maps.Polyline({
+        path: this.filteredJourneyPath,
+        geodesic: true,
+        strokeColor: "#FF0000",
+        strokeOpacity: 1.0,
+        strokeWeight: 2
+      });
+
+      this.filteredBusPositions = this.busPositions.filter(
+        bus => bus.idtrayecto == 1
+      ); //SOLO BUSES TRAYECTO 1
+      this.addBusMarkers();
+    },
+    addBusMarkers() {
+      for (var j = 0; j < this.filteredBusPositions.length; j++) {
+        var pos = utm.toLatLon(
+          this.filteredBusPositions[j].utmx,
+          this.filteredBusPositions[j].utmy,
+          30,
+          "N"
+        );
+        var marker = new google.maps.Marker({
+          isBus:true,
+          position: new google.maps.LatLng(pos.latitude, pos.longitude),
+          url:
+            "http://icons.iconarchive.com/icons/flaticonmaker/flat-style/24/bus-icon.png",
+          title:
+            this.filteredBusPositions[j].idautobus +
+            " - " +
+            this.filteredBusPositions[j].modelo
+        });
+        this.markers.push(marker);
+      }
+    },
+    busPositionsRefresh() {
+      const self = this;
+      setInterval(function() {
+        console.log("cojo datos");
+        self.refreshBusPositionsData();
+        console.log("borro buses");
+        self.deleteOldBusPositions();
+        console.log("pongo buses");
+        self.addBusMarkers();
+      }, 5000);
+    },
+    refreshBusPositionsData() {
+      return axios
+        .get("http://datos.gijon.es/doc/transporte/busgijontr.json")
+        .then(response => {
+          this.filteredBusPositions = response.data.posiciones.posicion.filter(
+            bus => bus.idtrayecto == 1
+          );
+        });
+    },
+    deleteOldBusPositions() {
+      let busMarkers = this.markers.filter(marker => marker.isBus !=undefined);
+      console.log(busMarkers.length)
+      console.log(this.markers.length)
+      this.markers = this.markers.filter( ( el ) => !busMarkers.includes( el ) );
+      console.log(this.markers.length)
     }
   }
 };

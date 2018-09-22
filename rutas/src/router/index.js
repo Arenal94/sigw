@@ -5,11 +5,9 @@ import GoogleMap from '@/components/HelloWorld'
 Vue.use(Router)
 
 export default new Router({
-  routes: [
-    {
-      path: '/',
-      name: 'GoogleMap',
-      component: GoogleMap
-    }
-  ]
+  routes: [{
+    path: '/',
+    name: 'GoogleMap',
+    component: GoogleMap
+  }]
 })
