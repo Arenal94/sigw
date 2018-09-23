@@ -5,7 +5,7 @@
 </template>
 
 <script>
-import GoogleMap from '@/components/HelloWorld'
+import GoogleMap from '@/components/Map'
 
 export default {
   name: 'App',
