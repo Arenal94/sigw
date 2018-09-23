@@ -44,12 +44,12 @@
     :zIndex='m.zIndex'
     @click='selectedBus=m'
   />
-   <gmap-polyline v-bind:path.sync="filteredJourneyPath" v-bind:options="{ strokeColor:'#008000'}">
+   <gmap-polyline v-bind:path.sync="filteredJourneyPath" v-bind:options="{ strokeColor:'#20B2AA'}">
          </gmap-polyline>
 
 </GmapMap>
 <select id="trayecto" v-model="selectLine" @change="setTrayecto()" class="form-control sel">
-<button id="buscarParada" type="button" class="btn btn-success" v-on:click="buscarParada()">Buscar parada cercana</button>
+<button id="buscarParada" type="button" class="btn btn-info" v-on:click="buscarParada()">Buscar parada más cercana</button>
 <div id="textoParada" class="textoParada">
   <p id="texto"></p>
 </div>
@@ -159,7 +159,7 @@ export default {
             style: this.google.maps.MapTypeControlStyle.DROPDOWN_MENU,
             mapTypeIds: this.nombres
           },
-          zoom: 13
+          zoom: 15
         });
         
       }
@@ -361,7 +361,7 @@ export default {
         this.userMarkers.push(markerFinal)
       else
         this.userMarkers[1].setPosition(posicionFinal)
-      document.getElementById('texto').innerHTML='La parada mas cercana a tu posicion esta a '+ distanciaFinal.toFixed(2)+'kms'
+      document.getElementById('texto').innerHTML='La parada más próxima a tu ubicación se encuentra a '+ (distanciaFinal.toFixed(2) * 1000) +' metros'
     },
     relateLinesAndJourney() {
       var lineas = this.lines;
@@ -417,9 +417,9 @@ export default {
       this.flightPath = new google.maps.Polyline({
         path: this.filteredJourneyPath,
         geodesic: true,
-        strokeColor: "#FF0000",
+        strokeColor: "#20B2AA",
         strokeOpacity: 1.0,
-        strokeWeight: 2
+        strokeWeight: 1
       });
       this.flightPath.setMap(this.map);
       this.filteredBusPositions = this.busPositions.filter(
@@ -538,8 +538,19 @@ Vue.use(VueGoogleMaps, {
   margin: 0 auto;
   width: 35%;
   overflow: auto;
-  margin-left: 1%;
+  display: inline-block;
+  padding: 10px;
 }
+
+#trayecto{
+  margin-top: 10px;
+}
+
+#buscarParada{
+  margin-top: 10px;
+  margin-left: 5px;
+}
+
 p {
   font-size: 17px;
   font-weight: bold;
