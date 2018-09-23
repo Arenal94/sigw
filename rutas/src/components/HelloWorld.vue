@@ -12,25 +12,22 @@
     :position='m.position'
     :clickable='true'
     :draggable='true'
-    :icon='m.url'
+    :icon='m.icon'
+    :animation='m.animation'
     :title='m.title'
-    @click='center=m.position'
-  />
-  <GmapMarker
-    ref='mapRef'
-    :key='index'
-    v-for='(m, index) in busMarkers'
-    :position='m.position'
-    :clickable='true'
-    :draggable='true'
-    :icon='m.url'
-    :title='m.title'
+    :zIndex='m.zIndex'
     @click='center=m.position'
   />
    <gmap-polyline v-bind:path.sync="filteredJourneyPath" v-bind:options="{ strokeColor:'#008000'}">
          </gmap-polyline>
 
 </GmapMap>
+<select id="trayecto" v-model="selectLine" @change="setTrayecto()" class="form-control sel">
+<button id="buscarParada" type="button" class="btn btn-success" v-on:click="buscarParada()">Buscar parada cercana</button>
+<div id="textoParada" class="textoParada">
+  <p id="texto"></p>
+</div>
+</select>
   </div>
 </template>
 
@@ -46,7 +43,6 @@ export default {
     return {
       center: { lat: 43.5369, lng: -5.637167 },
       markers: [],
-      busMarkers: [],
       filteredJourneyPath: [],
       filteredBusPositions: [],
       places: [],
@@ -54,6 +50,10 @@ export default {
       puntoTrayecto: [],
       busPositions: [],
       lines: [],
+      linesName: [],
+      trayecto:10,
+      flightPath:null,
+      selectLine:"",
       mapas: [
         {
           nombre: "PNOA ES",
@@ -105,19 +105,7 @@ export default {
     };
   },
   async created() {
-    const self = this;
-    this.markers.push({
-      position: this.center
-    });
-    let getDataPromise = new Promise((resolve, reject) =>
-      resolve(this.getDataAPI())
-    );
-
-    getDataPromise.then(() => {
-      this.relateLinesAndJourney();
-      this.drawDataOnGoogleMap();
-      this.busPositionsRefresh();
-    });
+    this.createMap()
   },
   computed: {
     google: gmapApi
@@ -142,10 +130,40 @@ export default {
           },
           zoom: 13
         });
+        
       }
+      var onOff = /** @type {!HTMLDivElement} */(
+                document.getElementById('trayecto'));
+      var parada = /** @type {!HTMLDivElement} */(
+                document.getElementById('buscarParada'));
+      var texto = /** @type {!HTMLDivElement} */(
+                document.getElementById('textoParada'));
+       map.controls[google.maps.ControlPosition.TOP_CENTER].push(onOff);
+       map.controls[google.maps.ControlPosition.TOP_LEFT].push(parada);
+       map.controls[google.maps.ControlPosition.BOTTOM_RIGHT].push(texto);
     });
   },
   methods: {
+    createMap: function(){
+      this.markers.push({
+        position: this.center
+      });
+      let getDataPromise = new Promise((resolve, reject) =>
+        resolve(this.getDataAPI())
+      );
+
+      getDataPromise.then(() => {
+          this.relateLinesAndJourney();
+          this.drawDataOnGoogleMap();
+        // this.busPositionsRefresh();
+          let promiseLines = new Promise((resolve, reject) =>
+          resolve(this.getLinesName())
+        );
+        promiseLines.then(() => {
+          this.setSelectLines();
+        });
+      });
+    },
     getMps: function(nombre, i, map, mapas, google) {
       return new this.google.maps.ImageMapType({
         getTileUrl: function(coord, zoom) {
@@ -239,6 +257,84 @@ export default {
           })
         );
     },
+    getLinesName: function(){
+      
+      for(var i in this.lines){
+        if(!this.checkLine(this.lines[i].idlinea)){
+          this.linesName.push({name:this.lines[i].descripcion, id:this.lines[i].idlinea})
+        }
+      }
+      console.log("Nombres de las lineas:")
+      console.log(this.linesName[0].name)
+    },
+    checkLine: function(number){
+      for(var i in this.linesName){
+         console.log("numero")
+        console.log(number)
+         console.log("linea")
+          console.log(this.lines[i].idlinea)
+        if(number === this.linesName[i].idlinea){
+          console.log("ESTOY DENTRO")
+          return true;
+        }
+      }
+      return false;
+    },
+    setTrayecto: function(){
+      console.log("linea escogida:")
+      console.log(this.getIdLine(this.selectLine) )
+      this.trayecto = this.getIdLine(this.selectLine)
+      this.deletemarkers()
+      this.createMap()
+    },
+    setSelectLines: function(){
+      for(var i in this.linesName){
+        var x = document.getElementById("trayecto");
+        var option = document.createElement("option");
+        option.text = this.linesName[i].name;
+        x.add(option);
+      }
+      
+    },
+    deletemarkers: function(){
+      console.log(this.flightPath)
+      this.flightPath.setMap(null)
+      this.filteredJourneyPath = [];
+      this.markers = []
+    },
+    getIdLine: function(name){
+      for(var i in this.linesName){
+        if(name === this.linesName[i].name){
+         return this.linesName[i].id;
+        }
+      }
+      return 1;
+    },
+    buscarParada: function(){
+      var userPosition = new google.maps.LatLng(this.markers[0].position.lat, this.markers[0].position.lng )
+      var distanciaFinal = 999999999999999999999999;
+      var posicionFinal = null;
+      for(var i in this.markers){
+        if(i!=0){
+          var markerPosition =this.markers[i].position
+          var distancia = google.maps.geometry.spherical.computeDistanceBetween(userPosition, markerPosition).toFixed(2)/1000
+          if(distancia<= distanciaFinal){
+            distanciaFinal = distancia
+            posicionFinal = markerPosition
+          }
+        }
+      }
+      var markerFinal = new google.maps.Marker({
+              map: this.map,
+              animation: google.maps.Animation.DROP,
+              position: posicionFinal,
+              icon : "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png",
+              zIndex:8,
+              title: "Parada mas cercana a tu posición"
+             });
+      this.markers.push(markerFinal)
+      document.getElementById('texto').innerHTML='La parada mas cercana a tu posicion esta a '+ distanciaFinal+'kms'
+    },
     relateLinesAndJourney() {
       var lineas = this.lines;
       this.puntoTrayecto.map(function(trayecto, value) {
@@ -246,6 +342,8 @@ export default {
           // console.log(`Comparando ${linea.idlinea} con  ${trayecto.idlinea}`)
           if (linea.idlinea == trayecto.idlinea) {
             trayecto.infolinea = linea;
+            console.log("linea guardada:")
+            console.log(linea.descripcion)
           }
         });
       });
@@ -255,7 +353,7 @@ export default {
       console.log(this.busPositions);
       console.log(this.lines);
       let filteredJourney = this.puntoTrayecto.filter(
-        journey => journey.idlinea == 1
+        journey => journey.idlinea == this.trayecto
       ); //Trayecto solo el 1
       var i;
       for (i = 0; i < filteredJourney.length; i++) {
@@ -278,7 +376,7 @@ export default {
         );
         var marker = new google.maps.Marker({
           position: new google.maps.LatLng(pos.latitude, pos.longitude),
-          url: pinImage,
+          icon: pinImage,
           title:
             filteredJourney[i].infolinea.descripcion +
             " Linea: " +
@@ -286,16 +384,16 @@ export default {
         });
         this.markers.push(marker);
       }
-      var flightPath = new google.maps.Polyline({
+      this.flightPath = new google.maps.Polyline({
         path: this.filteredJourneyPath,
         geodesic: true,
         strokeColor: "#FF0000",
         strokeOpacity: 1.0,
         strokeWeight: 2
       });
-
+      this.flightPath.setMap(this.map)
       this.filteredBusPositions = this.busPositions.filter(
-        bus => bus.idtrayecto == 1
+        bus => bus.idlinea == this.trayecto
       ); //SOLO BUSES TRAYECTO 1
       this.addBusMarkers();
     },
@@ -310,7 +408,7 @@ export default {
         var marker = new google.maps.Marker({
           isBus:true,
           position: new google.maps.LatLng(pos.latitude, pos.longitude),
-          url:
+          icon:
             "http://icons.iconarchive.com/icons/flaticonmaker/flat-style/24/bus-icon.png",
           title:
             this.filteredBusPositions[j].idautobus +
@@ -336,7 +434,7 @@ export default {
         .get("http://datos.gijon.es/doc/transporte/busgijontr.json")
         .then(response => {
           this.filteredBusPositions = response.data.posiciones.posicion.filter(
-            bus => bus.idtrayecto == 1
+            bus => bus.idlinea == this.trayecto
           );
         });
     },
@@ -359,5 +457,20 @@ Vue.use(VueGoogleMaps, {
 <style>
 .all {
   height: 100%;
+}
+.sel{
+  width:35%;
+}
+.textoParada{
+	background-color: #FFFFFF;
+	opacity: 0.85;
+	margin: 0 auto;
+	width: 35%;
+	overflow: auto;
+	margin-left: 1%;
+}
+p{
+      font-size: 17px;
+    font-weight: bold;
 }
 </style>
