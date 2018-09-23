@@ -49,7 +49,7 @@
 
 </GmapMap>
 <select id="trayecto" v-model="selectLine" @change="setTrayecto()" class="form-control sel">
-<button id="buscarParada" type="button" class="btn btn-success"  :disabled="selectedBus == null" v-on:click="buscarParada()">Buscar parada cercana</button>
+<button id="buscarParada" type="button" class="btn btn-success" v-on:click="buscarParada()">Buscar parada cercana</button>
 <div id="textoParada" class="textoParada">
   <p id="texto"></p>
 </div>
@@ -135,28 +135,58 @@ export default {
       ]
     };
   },
-  created() {
-    this.createMap();
+  async created() {
+    this.createMap()
   },
   computed: {
     google: gmapApi
   },
   mounted() {
-    //mapsAndButtons();
+    for (var i in this.mapas) {
+      this.nombres.push(this.mapas[i].nombre);
+    }
+    this.$refs.mapRef[0].$mapPromise.then(map => {
+      this.nombres.push(this.google.maps.MapTypeId.ROADMAP);
+      this.nombres.push(this.google.maps.MapTypeId.SATELLITE);
+      for (var i in this.mapas) {
+        map.mapTypes.set(
+          this.mapas[i].nombre,
+          this.getMps(this.mapas[i].nombre, i, map, this.mapas, this.google)
+        );
+        map.setOptions({
+          mapTypeControlOptions: {
+            position: this.google.maps.ControlPosition.TOP_RIGHT,
+            style: this.google.maps.MapTypeControlStyle.DROPDOWN_MENU,
+            mapTypeIds: this.nombres
+          },
+          zoom: 13
+        });
+        
+      }
+      var onOff = /** @type {!HTMLDivElement} */(
+                document.getElementById('trayecto'));
+      var parada = /** @type {!HTMLDivElement} */(
+                document.getElementById('buscarParada'));
+      var texto = /** @type {!HTMLDivElement} */(
+                document.getElementById('textoParada'));
+       map.controls[google.maps.ControlPosition.TOP_CENTER].push(onOff);
+       map.controls[google.maps.ControlPosition.TOP_LEFT].push(parada);
+       map.controls[google.maps.ControlPosition.BOTTOM_RIGHT].push(texto);
+    });
   },
   methods: {
-    createMap: function() {
+    createMap: function(){
+      this.userMarkers.push({
+        position: this.center
+      });
       let getDataPromise = new Promise((resolve, reject) =>
         resolve(this.getDataAPI())
       );
-
       getDataPromise.then(() => {
-        this.relateLinesAndJourney();
-        this.userMarkers.push(this.createUserMarker());
-        this.$nextTick(() => this.mapsAndButtons());
-        this.drawDataOnGoogleMap();
-        this.busPositionsRefresh();
-        let promiseLines = new Promise((resolve, reject) =>
+          this.relateLinesAndJourney();
+          this.drawDataOnGoogleMap();
+         this.busPositionsRefresh();
+          let promiseLines = new Promise((resolve, reject) =>
           resolve(this.getLinesName())
         );
         promiseLines.then(() => {
@@ -285,6 +315,7 @@ export default {
         var x = document.getElementById("trayecto");
         var option = document.createElement("option");
         option.text = this.linesName[i].name;
+        if(x.length < 25)
         x.add(option);
       }
     },
@@ -293,12 +324,8 @@ export default {
       this.filteredJourneyPath = [];
       this.markers = [];
       this.userMarkers = [];
-      /*var select = document.getElementById("trayecto");
-      var length = select.options.length;
-      let i;
-      for (i = 0; i < length; i++) {
-        select.options[i] = null;
-      }*/
+      this.busesMarkers = [];
+    
     },
     getIdLine: function(name) {
       for (var i in this.linesName) {
@@ -308,70 +335,33 @@ export default {
       }
       return 1;
     },
-    buscarParada: function() {
-      let userPosition = new google.maps.LatLng(
-        this.userMarkers[0].position.lat(),
-        this.userMarkers[0].position.lng()
-      );
-      let busPosition = new google.maps.LatLng(
-        this.selectedBus.position.lat(),
-        this.selectedBus.position.lng()
-      );
-
-      let distanceUserBus =
-        google.maps.geometry.spherical
-          .computeDistanceBetween(userPosition, busPosition)
-          .toFixed(2) / 1000;
-      document.getElementById("texto").innerHTML =
-        "La parada mas cercana a tu posicion esta a " + distanceUserBus + "kms";
-      var i = 0;
-      for (i; i < this.filteredJourney.length; i++) {
-        if (
-          this.filteredJourney[i].orden >= this.selectedBus.nextStop &&
-          this.filteredJourney[i].orden <= this.maxStopsJourney
-        ) {
-          let stopPosition = utm.toLatLon(
-            this.filteredJourney[i].utmx,
-            this.filteredJourney[i].utmy,
-            30,
-            "T"
-          );
-          let stopPos = new google.maps.LatLng(
-            stopPosition.latitude,
-            stopPosition.longitude
-          );
-          let distanceUserStop =
-            google.maps.geometry.spherical
-              .computeDistanceBetween(userPosition, stopPos)
-              .toFixed(2) / 1000;
-          let distanceBusStop =
-            google.maps.geometry.spherical
-              .computeDistanceBetween(busPosition, stopPos)
-              .toFixed(2) / 1000;
-          if (distanceUserStop < distanceBusStop) {
-            this.addMarkerStopRecommended(
-              stopPos,
-              this.filteredJourney[i].orden,
-              distanceUserStop
-            );
-            break;
+    buscarParada: function(){
+      var userPosition = new google.maps.LatLng(this.userMarkers[0].position.lat, this.userMarkers[0].position.lng )
+      var distanciaFinal = 999999999999999999999999;
+      var posicionFinal = null;
+      for(var i in this.markers){
+        if(i!=0){
+          var markerPosition =this.markers[i].position
+          var distancia = google.maps.geometry.spherical.computeDistanceBetween(userPosition, markerPosition).toFixed(2)/1000
+          if(distancia<= distanciaFinal){
+            distanciaFinal = distancia
+            posicionFinal = markerPosition
           }
         }
       }
-    },
-    addMarkerStopRecommended(pos, numStop, distance) {
       var markerFinal = new google.maps.Marker({
-        map: this.map,
-        animation: google.maps.Animation.DROP,
-        position: pos,
-        icon: "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png",
-        zIndex: 8,
-        title: "Parada recomendada"
-      });
-      this.markers.push(markerFinal);
-      document.getElementById(
-        "texto"
-      ).innerHTML = `Cogerás el bus si vas a la parada num: ${numStop} que está a ${distance}  kms`;
+              map: this.map,
+              animation: google.maps.Animation.DROP,
+              position: posicionFinal,
+              icon : "https://maps.google.com/mapfiles/ms/icons/yellow-dot.png",
+              zIndex:8,
+              title: "Parada mas cercana a tu posición"
+             });
+      if(this.userMarkers[1] == undefined)
+        this.userMarkers.push(markerFinal)
+      else
+        this.userMarkers[1].setPosition(posicionFinal)
+      document.getElementById('texto').innerHTML='La parada mas cercana a tu posicion esta a '+ distanciaFinal.toFixed(2)+'kms'
     },
     relateLinesAndJourney() {
       var lineas = this.lines;
@@ -517,16 +507,14 @@ export default {
         var texto = /** @type {!HTMLDivElement} */ (document.getElementById(
           "textoParada"
         ));
+        
         map.controls[google.maps.ControlPosition.TOP_CENTER].push(onOff);
         map.controls[google.maps.ControlPosition.TOP_LEFT].push(parada);
         map.controls[google.maps.ControlPosition.BOTTOM_RIGHT].push(texto);
       });
     },
     newUserMarkerPosition(marker, event) {
-      marker.position = new google.maps.LatLng(
-        event.latLng.lat(),
-        event.latLng.lng()
-      );
+      marker.position ={lat:event.latLng.lat(), lng:event.latLng.lng()}
     }
   }
 };
