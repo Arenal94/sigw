@@ -4,11 +4,24 @@
   :center='{lat: 43.536900, lng: -5.637167}'
   :zoom='7'
   style='width: 100%; height: 100%'
->
+>Busesmarkers
 <GmapMarker
     ref='mapRef'
     :key='index'
     v-for='(m, index) in markers'
+    :position='m.position'
+    :clickable='true'
+    :draggable='true'
+    :icon='m.icon'
+    :animation='m.animation'
+    :title='m.title'
+    :zIndex='m.zIndex'
+    @click='center=m.position'
+  />
+  <GmapMarker
+    ref='mapRef'
+    :key='index'
+    v-for='(m, index) in Busesmarkers'
     :position='m.position'
     :clickable='true'
     :draggable='true'
@@ -43,6 +56,7 @@ export default {
     return {
       center: { lat: 43.5369, lng: -5.637167 },
       markers: [],
+      Busesmarkers: [],
       filteredJourneyPath: [],
       filteredBusPositions: [],
       places: [],
@@ -415,7 +429,7 @@ export default {
             " - " +
             this.filteredBusPositions[j].modelo
         });
-        this.markers.push(marker);
+        this.Busesmarkers.push(marker);
       }
     },
     busPositionsRefresh() {
